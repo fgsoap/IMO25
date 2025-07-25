@@ -30,51 +30,52 @@ import sys
 import argparse
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import signal
-import threading
-import json
 import re
+
 
 def run_agent(agent_id, problem_file, log_dir, timeout=None, other_prompts=[]):
     """
     Run a single agent instance with the specified parameters.
-    
+
     Args:
         agent_id: Unique identifier for this agent instance
         problem_file: Path to the problem statement file
         log_dir: Directory to store log files
         timeout: Timeout in seconds (None for no timeout)
-    
+
     Returns:
         tuple: (agent_id, return_code, stdout, stderr, solution_found)
     """
     log_file = os.path.join(log_dir, f"agent_{agent_id:02d}.log")
-    
+
     cmd = [
-        sys.executable, "agent.py", 
+        sys.executable,
+        "agent.py",
         problem_file,
-        "--log", log_file,
-        "--other_prompts", f'\"{",".join(other_prompts)}\"'
+        "--log",
+        log_file,
+        "--other_prompts",
+        f'"{",".join(other_prompts)}"',
     ]
-    
+
     try:
         # Run the agent with timeout
         if timeout:
             result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                text=True, 
+                cmd,
+                capture_output=True,
+                text=True,
                 timeout=timeout,
-                cwd=os.path.dirname(os.path.abspath(__file__))
+                cwd=os.path.dirname(os.path.abspath(__file__)),
             )
         else:
             result = subprocess.run(
-                cmd, 
-                capture_output=True, 
+                cmd,
+                capture_output=True,
                 text=True,
-                cwd=os.path.dirname(os.path.abspath(__file__))
+                cwd=os.path.dirname(os.path.abspath(__file__)),
             )
-        
+
         # Check if a solution was found by looking for the success message
         solution_found = False
         if result.returncode == 0:
@@ -83,19 +84,38 @@ def run_agent(agent_id, problem_file, log_dir, timeout=None, other_prompts=[]):
                 solution_found = True
             # Also check the log file for the success message
             try:
-                with open(log_file, 'r', encoding='utf-8') as f:
+                with open(log_file, "r", encoding="utf-8") as f:
                     log_content = f.read()
                     if "Found a correct solution in run" in log_content:
                         solution_found = True
-            except:
+            except FileNotFoundError:
                 pass
-        
-        return (agent_id, result.returncode, result.stdout, result.stderr, solution_found)
-    
+
+        return (
+            agent_id,
+            result.returncode,
+            result.stdout,
+            result.stderr,
+            solution_found,
+        )
+
     except subprocess.TimeoutExpired:
-        return (agent_id, -1, "", f"Agent {agent_id} timed out after {timeout} seconds", False)
+        return (
+            agent_id,
+            -1,
+            "",
+            f"Agent {agent_id} timed out after {timeout} seconds",
+            False,
+        )
     except Exception as e:
-        return (agent_id, -1, "", f"Agent {agent_id} failed with error: {str(e)}", False)
+        return (
+            agent_id,
+            -1,
+            "",
+            f"Agent {agent_id} failed with error: {str(e)}",
+            False,
+        )
+
 
 def print_status(agent_id, status, stdout="", stderr=""):
     """Print status information for an agent."""
@@ -105,24 +125,48 @@ def print_status(agent_id, status, stdout="", stderr=""):
     if stderr.strip():
         print(f"[Agent {agent_id:02d}] STDERR: {stderr.strip()}")
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Run multiple IMO agent instances in parallel')
-    parser.add_argument('problem_file', help='Path to the problem statement file')
-    parser.add_argument('--num-agents', '-n', type=int, default=10, 
-                       help='Number of parallel agents to run (default: 10)')
-    parser.add_argument('--log-dir', '-d', default='logs', 
-                       help='Directory to store log files (default: logs)')
-    parser.add_argument('--timeout', '-t', type=int, default=None,
-                       help='Timeout in seconds for each agent (default: no timeout)')
-    parser.add_argument('--max-workers', '-w', type=int, default=None,
-                       help='Maximum number of worker processes (default: number of agents)')
-    parser.add_argument('--other_prompts', '-o', type=str, help='Other prompts (optional)')
-    
+    parser = argparse.ArgumentParser(
+        description="Run multiple IMO agent instances in parallel"
+    )
+    parser.add_argument("problem_file", help="Path to the problem statement file")
+    parser.add_argument(
+        "--num-agents",
+        "-n",
+        type=int,
+        default=10,
+        help="Number of parallel agents to run (default: 10)",
+    )
+    parser.add_argument(
+        "--log-dir",
+        "-d",
+        default="logs",
+        help="Directory to store log files (default: logs)",
+    )
+    parser.add_argument(
+        "--timeout",
+        "-t",
+        type=int,
+        default=None,
+        help="Timeout in seconds for each agent (default: no timeout)",
+    )
+    parser.add_argument(
+        "--max-workers",
+        "-w",
+        type=int,
+        default=None,
+        help="Maximum number of worker processes (default: number of agents)",
+    )
+    parser.add_argument(
+        "--other_prompts", "-o", type=str, help="Other prompts (optional)"
+    )
+
     args = parser.parse_args()
-    
+
     # Create log directory if it doesn't exist
     os.makedirs(args.log_dir, exist_ok=True)
-    
+
     print(f"Starting {args.num_agents} parallel agents...")
     print(f"Problem file: {args.problem_file}")
     print(f"Log directory: {args.log_dir}")
@@ -131,7 +175,7 @@ def main():
     print(f"Max workers: {args.max_workers or args.num_agents}")
     print("Note: All agents will run to completion regardless of solution found")
     print("-" * 50)
-    
+
     # Track results
     completed_agents = []
     successful_agents = []
@@ -141,23 +185,32 @@ def main():
 
     other_prompts = []
     if args.other_prompts:
-        other_prompts = args.other_prompts.split(',')
-    
+        other_prompts = args.other_prompts.split(",")
+
     start_time = time.time()
-    
+
     try:
-        with ProcessPoolExecutor(max_workers=args.max_workers or args.num_agents) as executor:
+        with ProcessPoolExecutor(
+            max_workers=args.max_workers or args.num_agents
+        ) as executor:
             # Submit all agent tasks
             future_to_agent = {
-                executor.submit(run_agent, i, args.problem_file, args.log_dir, args.timeout, other_prompts): i 
+                executor.submit(
+                    run_agent,
+                    i,
+                    args.problem_file,
+                    args.log_dir,
+                    args.timeout,
+                    other_prompts,
+                ): i
                 for i in range(args.num_agents)
             }
-            
+
             # Process completed agents
             for future in as_completed(future_to_agent):
                 agent_id, return_code, stdout, stderr, found_solution = future.result()
                 completed_agents.append(agent_id)
-                
+
                 if found_solution:
                     solution_found = True
                     solution_agent_id = agent_id
@@ -172,18 +225,20 @@ def main():
                 else:
                     status = f"FAILED (return code: {return_code})"
                     failed_agents.append(agent_id)
-                
+
                 print_status(agent_id, status, stdout, stderr)
-                print(f"Progress: {len(completed_agents)}/{args.num_agents} agents completed")
+                print(
+                    f"Progress: {len(completed_agents)}/{args.num_agents} agents completed"
+                )
                 print("-" * 30)
-    
+
     except KeyboardInterrupt:
         print("\nReceived interrupt signal. Shutting down gracefully...")
         # The ProcessPoolExecutor will handle cleanup automatically
-    
+
     end_time = time.time()
     total_time = end_time - start_time
-    
+
     # Print summary
     print("\n" + "=" * 50)
     print("FINAL SUMMARY")
@@ -193,48 +248,56 @@ def main():
     print(f"Successful agents: {len(successful_agents)}")
     print(f"Failed agents: {len(failed_agents)}")
     print(f"Success rate: {len(successful_agents)/args.num_agents*100:.1f}%")
-    
+
     if solution_found:
         print(f"\n🎉 SOLUTION FOUND by Agent {solution_agent_id:02d}! 🎉")
-        print(f"Log file with solution: {os.path.join(args.log_dir, f'agent_{solution_agent_id:02d}.log')}")
-        
+        print(
+            f"Log file with solution: {os.path.join(args.log_dir, f'agent_{solution_agent_id:02d}.log')}"
+        )
+
         # Try to extract and display the solution
-        solution_log_file = os.path.join(args.log_dir, f"agent_{solution_agent_id:02d}.log")
+        solution_log_file = os.path.join(
+            args.log_dir, f"agent_{solution_agent_id:02d}.log"
+        )
         try:
-            with open(solution_log_file, 'r', encoding='utf-8') as f:
+            with open(solution_log_file, "r", encoding="utf-8") as f:
                 log_content = f.read()
                 # Look for the solution in the log
                 if "Found a correct solution in run" in log_content:
                     # Extract the solution JSON
-                    solution_match = re.search(r'Found a correct solution in run \d+\.\s*\n(.*?)(?=\n\n|\n>>>>>>>|\Z)', 
-                                            log_content, re.DOTALL)
+                    solution_match = re.search(
+                        r"Found a correct solution in run \d+\.\s*\n(.*?)(?=\n\n|\n>>>>>>>|\Z)",
+                        log_content,
+                        re.DOTALL,
+                    )
                     if solution_match:
                         solution_text = solution_match.group(1).strip()
-                        print(f"\nSOLUTION FOUND:")
+                        print("\nSOLUTION FOUND:")
                         print("=" * 50)
                         print(solution_text)
                         print("=" * 50)
         except Exception as e:
             print(f"Could not extract solution from log file: {e}")
-    
+
     if successful_agents:
         print(f"\nSuccessful agent IDs: {sorted(successful_agents)}")
-    
+
     if failed_agents:
         print(f"Failed agent IDs: {sorted(failed_agents)}")
-    
+
     print(f"\nLog files are available in: {os.path.abspath(args.log_dir)}")
-    
+
     # List log files
-    log_files = [f for f in os.listdir(args.log_dir) if f.endswith('.log')]
+    log_files = [f for f in os.listdir(args.log_dir) if f.endswith(".log")]
     if log_files:
-        print(f"\nGenerated log files:")
+        print("\nGenerated log files:")
         for log_file in sorted(log_files):
             file_path = os.path.join(args.log_dir, log_file)
             file_size = os.path.getsize(file_path)
             print(f"  {log_file} ({file_size} bytes)")
-    
+
     return 0 if solution_found else 1
 
+
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())
